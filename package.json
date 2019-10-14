@@ -1,0 +1,27 @@
+{
+  "name": "yondermap",
+  "version": "0.1.0",
+  "description": "changing the way you make yer way down yonder",
+  "main": "index.js",
+  "scripts": {
+    "start": "http-server -a localhost --cors -o"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BrightRainSolutions/yondermap.git"
+  },
+  "keywords": [
+    "mapbox",
+    "yonder",
+    "wander",
+    "map",
+    "directions"
+  ],
+  "author": "brightrain",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/BrightRainSolutions/yondermap/issues"
+  },
+  "homepage": "https://github.com/BrightRainSolutions/yondermap#readme",
+  "dependencies": {}
+}
