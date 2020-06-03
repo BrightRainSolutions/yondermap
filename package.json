@@ -1,7 +1,7 @@
 {
   "name": "yondermap",
   "version": "0.1.0",
-  "description": "changing the way you make yer way down yonder",
+  "description": "changing the way you make yer way over yonder",
   "main": "index.js",
   "scripts": {
     "start": "http-server -a localhost --cors -o"
