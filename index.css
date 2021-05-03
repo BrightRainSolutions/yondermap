@@ -7,12 +7,16 @@ html,body {
     height: 100%;
     margin: 0;
     font-size: 16px;
+    font-family: 'WoodSticks', Arial, sans-serif;
 }
 
 /* media queries to minimize panel to support mobile */
 @media screen and (max-width: 600px) {
     html,body {
         font-size: 12px;
+    }
+    #map {
+        width: 100% !important;
     }
     #panel {
       height: 40% !important;
@@ -22,39 +26,60 @@ html,body {
       bottom: 0 !important;
       margin: 0 !important;
     }
+    #panel.min-panel {
+        height: 50px !important;
+        bottom: 0 !important;
+    }
+    #locate {
+        bottom: 41%;
+        top: unset !important;
+        left: 5px !important;
+        width: 20% !important;
+    }
+    #about {
+        bottom: 41% !important;
+        top: unset !important;
+        left: unset !important;
+        right: 5px !important;
+        width: 20% !important;
+    }
+    #shareThatLink {
+        bottom: 41% !important;
+        left: calc(20% + 10px) !important;
+        width: 55% !important;
+        top: unset !important;
+    }
+    #showLink {
+        bottom: calc(41% + 5px);
+        left: 60px !important;
+        top: unset !important;
+    }
+    #yonderNotify {
+        width: 200px !important;
+        left: calc(50% - 100px) !important;
+        top: 0 !important;
+    }
     #header {
         width: 100% !important;
     }
+    #min {
+        visibility: visible !important;
+    }
   }
 
-/*
-get our directions text to wrap 
-https://stackoverflow.com/questions/54506663/how-to-achieve-word-break-in-bulma-level-component-and-set-equal-width-to-the-le
-*/
-.level .level-right {
-    min-width: 0;
-    word-break: break-word;
-    flex-basis: 50%;
-}
-.level .level-right .level-item {
-    flex-shrink: 1;
-    padding: .5em .5em;
-}
-
 #map {
-    width: 100%;
+    position: absolute;
+    width: 65%;
     height: 100%;
+    right: 0;
     margin: 0
 }
 #panel {
-    font-family: 'WoodSticks', Arial, sans-serif;
     color: hsl(37, 58%, 37%);
     font-size: 1rem;
     position: absolute;
     z-index: 99999;
-    bottom: 0;
-    top: 5px;
-    left: 5px;
+    height: 100%;
     width: 35%;
     background-image: url("./assets/road-surface.svg");
     background-color: whitesmoke;
@@ -68,7 +93,6 @@ https://stackoverflow.com/questions/54506663/how-to-achieve-word-break-in-bulma-
 #header {
     padding: 6px;
     margin-bottom: 8px;
-    position: fixed;
     width: 35%;
     background-color: white
 }
@@ -78,6 +102,89 @@ https://stackoverflow.com/questions/54506663/how-to-achieve-word-break-in-bulma-
 }
 #directionsContainer {
     padding-top: 120px
+}
+
+#locate {
+    position: absolute;
+    z-index: 98;
+    top: 5px;
+    left: 36%;
+    width: 50px;
+    height: 50px
+}
+
+#about {
+    position: absolute;
+    z-index: 98;
+    top: 60px;
+    left: 36%;
+    width: 50px;
+    height: 50px
+}
+
+#shareThatLink {
+    position: absolute;
+    z-index: 98;
+    top: 5px;
+    left: calc(36% + 55px);
+    width: 300px;
+    height: 35px;
+    background-color: whitesmoke;
+    opacity:0.85;
+    padding: 4px;
+    text-align: center;
+}
+#shareThatLink:hover {
+    opacity: 1;
+    cursor: pointer;
+}
+#showLink {
+    position: absolute;
+    z-index: 98;
+    top: 40px;
+    left: calc(36% + 55px);
+    width: 300px;
+    background-color: whitesmoke;
+    padding: 4px;
+}
+input#link {
+    width: 80%;
+    font-family: 'WoodSticks', Arial, sans-serif;
+    background-color: whitesmoke;
+    border-color: #dbdbdb;
+    border-width: 1px;
+    color: hsl(37, 58%, 37%);
+    padding: 4px;
+    margin-bottom: 2px
+}
+#copyLinkBtn {
+    float: right;
+    width: 20%
+}
+#yonderNotify {
+    position: absolute;
+    z-index: 100;
+    left: calc(36% + 55px);
+    top: 5px;
+    width: 350px;
+    background-color: hsl(37, 58%, 37%);
+    color: whitesmoke;
+    text-align: center;
+    padding: 12px;
+}
+#brsLink {
+    color: #0044aa;
+    text-decoration: none;
+}
+#brsLink:hover {
+    color: #ff6600;
+}
+#min {
+    visibility: hidden;
+    width: 100%;
+}
+#min:hover {
+    cursor: pointer !important;
 }
 .directions-list-item {
     border: 0.1em solid #ccc;
@@ -101,6 +208,32 @@ https://stackoverflow.com/questions/54506663/how-to-achieve-word-break-in-bulma-
 }
 .direction-icon {
     width: 50px
+}
+button.yonderbtn {
+    font-family: 'WoodSticks', Arial, sans-serif;
+    background-color: whitesmoke;
+    border-color: #dbdbdb;
+    border-width: 1px;
+    color: hsl(37, 58%, 37%);
+    cursor: pointer;
+    justify-content: center;
+    padding: 4px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+/*
+get our directions text to wrap 
+https://stackoverflow.com/questions/54506663/how-to-achieve-word-break-in-bulma-level-component-and-set-equal-width-to-the-le
+*/
+.level .level-right {
+    min-width: 0;
+    word-break: break-word;
+    flex-basis: 50%;
+}
+.level .level-right .level-item {
+    flex-shrink: 1;
+    padding: .5em .5em;
 }
 
 /* styling for the directions component */
