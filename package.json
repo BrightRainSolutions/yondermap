@@ -4,7 +4,7 @@
   "description": "changing the way you make yer way over yonder",
   "main": "index.js",
   "scripts": {
-    "start": "http-server -a localhost --cors -o"
+    "start": "browser-sync start --server --watch --browser \"chrome\""
   },
   "repository": {
     "type": "git",
