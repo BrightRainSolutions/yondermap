@@ -20,23 +20,12 @@
     <script src='https://unpkg.com/three@0.126.0/build/three.min.js'></script>
     <script src='https://unpkg.com/three@0.126.0/examples/js/loaders/GLTFLoader.js'></script>
     
-    <!-- Matomo -->
-    <!-- DO NOT BE ALARMED YONDERERS !!! Matomo is the least invasive of the tracking platforms -->
-    <!-- just imagine if we were using Google Analytics ; )  -->
-    <script type="text/javascript">
-      var _paq = window._paq || [];
-      /* tracker methods like "setCustomDimension" should be called before "trackPageView" */
-      _paq.push(['trackPageView']);
-      _paq.push(['enableLinkTracking']);
-      (function() {
-        var u="https://yondermap.matomo.cloud/";
-        _paq.push(['setTrackerUrl', u+'matomo.php']);
-        _paq.push(['setSiteId', '1']);
-        var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
-        g.type='text/javascript'; g.async=true; g.defer=true; g.src='//cdn.matomo.cloud/yondermap.matomo.cloud/matomo.js'; s.parentNode.insertBefore(g,s);
-      })();
-    </script>
-    <!-- End Matomo Code -->
+    <!-- Privacy-friendly analytics by Plausible -->
+  <script async src="https://plausible.io/js/pa-xAz_Pwabsr4-lEOpQQ-xH.js"></script>
+  <script>
+    window.plausible=window.plausible||function(){(plausible.q=plausible.q||[]).push(arguments)},plausible.init=plausible.init||function(i){plausible.o=i||{}};
+    plausible.init()
+  </script>
     
     <script src="index.js"></script>
     

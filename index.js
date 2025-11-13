@@ -127,7 +127,7 @@ new Vue({
             "properties": {}
         },
         // for the horse model
-        // the mapbox custom later that contains the horse model
+        // the mapbox custom layer that contains the horse model
         thatHorseLayer: null,
         modelAsMercatorCoordinate: null,
         modelTransform: null,
