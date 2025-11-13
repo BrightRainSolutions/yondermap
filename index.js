@@ -2,7 +2,8 @@ new Vue({
     el: "#app",
     template: `
     <div id="appWrapper">
-    <span @click="getLink" id="shareThatLink">send this route to yer pardner</span>    
+    <span @click="getLink" id="shareThatLink">send this route to yer pardner</span>
+    <button v-show="routeFinished" @click="giddyUpAgin" id="giddyUpAginBtn" class="yonderbtn">Giddy Up Agin!</button>
     <div id="map"></div>
         <div id="panel" class="panel">
             <div id="header" class="has-text-centered">    
@@ -141,6 +142,7 @@ new Vue({
         prevTime: Date.now(),
         isModelLoaded: false,
         moveInterval: null,
+        routeFinished: false,   // Track if Gertie finished the route (for Giddy Up Agin button)
         // core mapbox directions component
         directionsThing: null,
         origin: "",
@@ -404,6 +406,25 @@ new Vue({
                     this.yonderThatRoute(ev);
                 });
 
+                // UX enhancements for origin/destination inputs
+                // Wait a bit for the directions control to render
+                setTimeout(() => {
+                    const originInput = document.querySelector('.mapboxgl-ctrl-geocoder input[placeholder*="startin"]');
+                    const destInput = document.querySelector('.mapboxgl-ctrl-geocoder input[placeholder*="wanna"]');
+
+                    // Select all text on focus so users can just start typing
+                    if (originInput) {
+                        originInput.addEventListener('focus', function() {
+                            this.select();
+                        });
+                    }
+                    if (destInput) {
+                        destInput.addEventListener('focus', function() {
+                            this.select();
+                        });
+                    }
+                }, 500);
+
                 // set current url to our link
                 this.link = window.location;
 
@@ -428,7 +449,8 @@ new Vue({
                         'source': 'step-location-source',
                         'layout': {
                         'icon-image': 'step-icon',
-                        'icon-size': 0.5
+                        'icon-size': 0.5,
+                        'visibility': 'none'  // Hidden until a route is created
                         }
                     });
                 });
@@ -444,6 +466,22 @@ new Vue({
         yonderThatRoute(ev) {
             // clear existing steps
             this.steps = [];
+
+            // Hide the Giddy Up Agin button - we're starting a new route
+            this.routeFinished = false;
+
+            // Start/restart Gertie for the route
+            if (this.mixer && this.mesh) {
+                // Start the galloping animation (or restart if this is a new route)
+                this.mixer.stopAllAction();
+                const gltf = this.mesh.userData.gltf;
+                if (gltf && gltf.animations && gltf.animations[0]) {
+                    this.mixer.clipAction(gltf.animations[0]).setDuration(1).play();
+                }
+
+                console.log("Gertie is ready to run!");
+            }
+
             // iterate all legs and get all steps from all legs
             let steps = [];
             ev.route[0].legs.forEach(leg => {
@@ -456,6 +494,9 @@ new Vue({
             let thatFirstManeuver = steps[0].maneuver;
             this.locationData.geometry.coordinates = thatFirstManeuver.location;
             this.map.getSource('step-location-source').setData(this.locationData);
+
+            // Show the stump marker now that we have a route
+            this.map.setLayoutProperty('step-location', 'visibility', 'visible');
 
             // Store the route coordinates by decoding the polyline
             let coordinates = [];
@@ -516,31 +557,31 @@ new Vue({
                 // Short routes: detailed and smooth
                 this.pointSkip = 1;
                 this.interpolationSteps = 10;
-                this.animationInterval = 30;
+                this.animationInterval = 15;  // Was 30ms
                 console.log("Short route - detailed animation");
             } else if (routeDistanceKm < 50) {
                 // Medium routes: balanced
                 this.pointSkip = 2;
                 this.interpolationSteps = 8;
-                this.animationInterval = 20;
+                this.animationInterval = 10;  // Was 20ms
                 console.log("Medium route - balanced animation");
             } else if (routeDistanceKm < 200) {
-                // Long routes: faster but still smooth
-                this.pointSkip = 5;
+                // Long routes: balanced skip and speed
+                this.pointSkip = 7;  // Sweet spot between smooth and not jerky
                 this.interpolationSteps = 10;
-                this.animationInterval = 12;
+                this.animationInterval = 8;  // Slowed down a bit
                 console.log("Long route - fast animation");
             } else if (routeDistanceKm < 500) {
-                // Very long routes
-                this.pointSkip = 8;
+                // Very long routes: moderate skip
+                this.pointSkip = 10;  // More moderate
                 this.interpolationSteps = 12;
-                this.animationInterval = 10;
+                this.animationInterval = 7;  // Slowed down a bit
                 console.log("Very long route - faster animation");
             } else {
-                // Epic routes like Boulder to Tucson (800+ km)
-                this.pointSkip = 12;
+                // Epic routes: higher skip but not skiing
+                this.pointSkip = 15;  // Not as extreme
                 this.interpolationSteps = 15;  // More interpolation = smoother despite skipping
-                this.animationInterval = 8;
+                this.animationInterval = 6;  // Slowed down a bit
                 console.log("Epic route - balanced fast animation");
             }
 
@@ -582,12 +623,13 @@ new Vue({
 
                 vm.moveInterval = setInterval(() => {
                     try {
-                        // Loop back to start when reaching the end
+                        // Stop when reaching the end
                         if (!vm.routeCoordinates || vm.currentRouteIndex >= vm.routeCoordinates.length - 1) {
-                            console.log("Horse reached the destination! Starting over...");
-                            vm.currentRouteIndex = 0;
-                            vm.interpolationProgress = 0;
-                            // Don't return - let it continue to loop
+                            console.log("Horse reached the destination! Stopping...");
+                            clearInterval(vm.moveInterval);
+                            vm.moveInterval = null;
+                            vm.stopGertie();
+                            return;
                         }
 
                         // Get the current and next points (with point skipping)
@@ -811,6 +853,104 @@ new Vue({
           // Trigger a repaint to show the updated position
           this.map.triggerRepaint();
       },
+      stopGertie() {
+          if (!this.mesh || !this.mixer) {
+              console.error("Mesh or mixer is not loaded yet");
+              return;
+          }
+
+          console.log("Gertie reached the destination!");
+
+          // Stop the galloping animation - she just stands still
+          this.mixer.stopAllAction();
+
+          // Show the Giddy Up Agin button
+          this.routeFinished = true;
+
+          // Trigger one final repaint to show the stopped pose
+          this.map.triggerRepaint();
+      },
+      giddyUpAgin() {
+          console.log("Giddy up agin! Restarting route...");
+
+          // Hide the button
+          this.routeFinished = false;
+
+          // Restart the galloping animation
+          if (this.mixer && this.mesh) {
+              this.mixer.stopAllAction();
+              const gltf = this.mesh.userData.gltf;
+              if (gltf && gltf.animations && gltf.animations[0]) {
+                  this.mixer.clipAction(gltf.animations[0]).setDuration(1).play();
+              }
+          }
+
+          // Reset to start of route
+          this.currentRouteIndex = 0;
+          this.interpolationProgress = 0;
+
+          // Clear any existing animation
+          if (this.moveInterval) {
+              clearInterval(this.moveInterval);
+          }
+
+          // Restart the horse movement animation (copied from yonderThatRoute)
+          const vm = this;
+          if (!vm.routeCoordinates || vm.routeCoordinates.length === 0) {
+              console.error("Cannot restart - no route coordinates");
+              return;
+          }
+
+          vm.moveInterval = setInterval(() => {
+              try {
+                  // Stop when reaching the end
+                  if (!vm.routeCoordinates || vm.currentRouteIndex >= vm.routeCoordinates.length - 1) {
+                      console.log("Horse reached the destination! Stopping...");
+                      clearInterval(vm.moveInterval);
+                      vm.moveInterval = null;
+                      vm.stopGertie();
+                      return;
+                  }
+
+                  // Get the current and next points (with point skipping)
+                  const currentPoint = vm.routeCoordinates[vm.currentRouteIndex];
+                  const nextIndex = Math.min(vm.currentRouteIndex + vm.pointSkip, vm.routeCoordinates.length - 1);
+                  const nextPoint = vm.routeCoordinates[nextIndex];
+
+                  if (!currentPoint || !nextPoint || currentPoint.length < 2 || nextPoint.length < 2) {
+                      console.error("Invalid coordinate at index " + vm.currentRouteIndex, currentPoint, nextPoint);
+                      vm.currentRouteIndex++;
+                      return;
+                  }
+
+                  // Linear interpolation between current and next point
+                  const t = vm.interpolationProgress / vm.interpolationSteps;
+                  const interpolatedX = currentPoint[0] + (nextPoint[0] - currentPoint[0]) * t;
+                  const interpolatedY = currentPoint[1] + (nextPoint[1] - currentPoint[1]) * t;
+
+                  // Calculate the bearing to the next point in radians
+                  const deltaX = nextPoint[0] - currentPoint[0];
+                  const deltaY = nextPoint[1] - currentPoint[1];
+                  const angleInRadians = Math.atan2(deltaX, deltaY);
+
+                  // Update the horse's position and rotation
+                  vm.giddyUpHorse(interpolatedX, interpolatedY, angleInRadians);
+
+                  // Increment interpolation progress
+                  vm.interpolationProgress++;
+
+                  // When we've completed interpolation between these two points, move to next segment
+                  if (vm.interpolationProgress >= vm.interpolationSteps) {
+                      vm.interpolationProgress = 0;
+                      vm.currentRouteIndex += vm.pointSkip;  // Skip points based on route distance
+                  }
+              } catch (error) {
+                  console.error("Error in horse animation loop:", error);
+                  clearInterval(vm.moveInterval);
+                  vm.moveInterval = null;
+              }
+          }, vm.animationInterval);
+      },
       scaleThatHorse(zoom) {
         if (!this.mesh) {
           return;
@@ -958,11 +1098,17 @@ new Vue({
                         yonderVue.mesh.scale.set(500, 500, 500);
                         yonderVue.scene.add(yonderVue.mesh);
 
+                        // Store gltf data for later access (for animation reset)
+                        yonderVue.mesh.userData.gltf = gltf;
+
+                        // Horse model has 1 animation: "horse_A_" (1.5s galloping animation using morph targets)
                         yonderVue.mixer = new THREE.AnimationMixer(yonderVue.mesh);
 
-                        yonderVue.mixer
-                          .clipAction(gltf.animations[0])
-                          .setDuration(1).play();
+                        // Don't start animation on startup - wait for a route
+                        // Animation will start when yonderThatRoute is called
+
+                        // Turn horse broadside (90 degrees) so she's easier to see
+                        yonderVue.modelTransform.rotateY = Math.PI / 2;
 
                         // Mark the model as loaded
                         yonderVue.isModelLoaded = true;

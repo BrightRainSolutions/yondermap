@@ -65,6 +65,9 @@ html,body {
     #min {
         visibility: visible !important;
     }
+    #giddyUpAginBtn {
+        display: none !important;
+    }
   }
 
 #map {
@@ -136,6 +139,24 @@ html,body {
 #shareThatLink:hover {
     opacity: 1;
     cursor: pointer;
+}
+
+#giddyUpAginBtn {
+    position: absolute;
+    z-index: 98;
+    top: 10px;
+    right: 320px;
+    width: 150px;
+    height: 40px;
+    background-color: whitesmoke;
+    opacity: 0.85;
+    padding: 8px;
+    font-size: 1.1rem;
+}
+#giddyUpAginBtn:hover {
+    opacity: 1;
+    background-color: hsl(37, 58%, 37%);
+    color: whitesmoke;
 }
 #showLink {
     position: absolute;
