@@ -104,6 +104,14 @@ new Vue({
                 selected: false
             }
         ],
+        routeCoordinates: [],
+        currentRouteIndex: 0,
+        interpolationProgress: 0,  // For smooth animation between points
+        interpolationSteps: 10,     // Number of steps to interpolate between each point
+        pointSkip: 1,               // How many points to skip (1 = use every point, 2 = every other point, etc.)
+        animationInterval: 15,      // Animation speed in ms
+        cameraFollowHorse: false,   // Whether camera should follow the horse (disabled for now)
+        hasLoggedRotation: false,   // Debug flag for rotation logging
         duration: "",
         map: {},
         locationData: {
@@ -131,6 +139,8 @@ new Vue({
         scene: null,
         theta: 0,
         prevTime: Date.now(),
+        isModelLoaded: false,
+        moveInterval: null,
         // core mapbox directions component
         directionsThing: null,
         origin: "",
@@ -318,31 +328,69 @@ new Vue({
           }]
     },
     methods: {
+        // Decode polyline string into coordinate array
+        // Mapbox Directions API uses polyline5 encoding (precision 5) by default
+        decodePolyline(encoded, precision = 5) {
+            let points = [];
+            let index = 0, len = encoded.length;
+            let lat = 0, lng = 0;
+            let factor = Math.pow(10, precision);
+
+            while (index < len) {
+                let b, shift = 0, result = 0;
+                do {
+                    b = encoded.charCodeAt(index++) - 63;
+                    result |= (b & 0x1f) << shift;
+                    shift += 5;
+                } while (b >= 0x20);
+                let dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+                lat += dlat;
+
+                shift = 0;
+                result = 0;
+                do {
+                    b = encoded.charCodeAt(index++) - 63;
+                    result |= (b & 0x1f) << shift;
+                    shift += 5;
+                } while (b >= 0x20);
+                let dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+                lng += dlng;
+
+                // Output as [longitude, latitude] for GeoJSON format
+                points.push([lng / factor, lat / factor]);
+            }
+
+            console.log("Decoded with precision " + precision + ", factor " + factor);
+            return points;
+        },
         init() {
             mapboxgl.accessToken = 'pk.eyJ1IjoiYnJpZ2h0cmFpbiIsImEiOiJjazFwdjJoZmExMWQzM2Vwc3dsc2swc2d5In0.6LCQE5exyPG5f1uWzDJSBQ';
             this.map = new mapboxgl.Map({
                 container: 'map',
                 style: 'mapbox://styles/brightrain/cjrmcme6m0kwp2sjz5qvez9ga',
-                center: [-96, 45],
+                //center: [-96, 45],
                 // ToDo: for the horse
-                //center: [this.modelX, this.modelY],
+                center: [this.modelX, this.modelY],
                 zoom: 4,
-                pitch: 10,
+                pitch: 45,  // Better default pitch to see 3D models
                 bearing: 0
             });
 
             this.directionsThing = new MapboxDirections({
                 accessToken: mapboxgl.accessToken,
-                steps: false,
+                steps: true,  // Need steps to get full geometry
                 controls: {instructions: false, profileSwitcher: false},
                 placeholderOrigin: 'where y`all startin from?',
                 placeholderDestination: 'where y`all wanna go?',
-                styles: this.directionsStyleOptions
+                styles: this.directionsStyleOptions,
+                geometries: 'geojson',  // Request GeoJSON format instead of encoded polyline
+                alternatives: false,
+                congestion: true
             });
             this.map.addControl(this.directionsThing, 'top-right');
 
             // ToDo: the horse is hard, wip
-            //this.setupThatHorse();
+            this.setupThatHorse();
 
             // when the map is loaded setup our route event
             this.map.on('load', () => {
@@ -387,8 +435,10 @@ new Vue({
             });
             
             this.map.on('zoom', () => {
-              let zoom = this.map.getZoom().toFixed(2);
-              //this.scaleThatHorse(zoom);
+              if (this.isModelLoaded) {
+                let zoom = this.map.getZoom().toFixed(2);
+                this.scaleThatHorse(zoom);
+              }
           });
         },
         yonderThatRoute(ev) {
@@ -406,22 +456,222 @@ new Vue({
             let thatFirstManeuver = steps[0].maneuver;
             this.locationData.geometry.coordinates = thatFirstManeuver.location;
             this.map.getSource('step-location-source').setData(this.locationData);
-            // place and scale that horse
-            //this.giddyUpHorse(thatFirstManeuver.location[0], thatFirstManeuver.location[1], thatFirstManeuver.bearing_after);
-            //this.scaleThatHorse(this.map.getZoom().toFixed(2));
-            
-            // iterate steps from the route to create our steps
-            // for direction panel
+
+            // Store the route coordinates by decoding the polyline
+            let coordinates = [];
+
+            console.log("Route geometry type:", typeof ev.route[0].geometry);
+            console.log("Route geometry value:", ev.route[0].geometry);
+
+            if (ev.route[0].geometry) {
+                if (typeof ev.route[0].geometry === 'string') {
+                    // Decode the polyline string to get smooth coordinates
+                    try {
+                        coordinates = this.decodePolyline(ev.route[0].geometry);
+                        console.log("Decoded polyline into " + coordinates.length + " coordinate points");
+                        if (coordinates.length > 0) {
+                            console.log("First coordinate:", coordinates[0]);
+                            console.log("Last coordinate:", coordinates[coordinates.length - 1]);
+                        }
+                    } catch (error) {
+                        console.error("Error decoding polyline:", error);
+                    }
+                } else if (ev.route[0].geometry.coordinates && ev.route[0].geometry.coordinates.length > 0) {
+                    // Already in GeoJSON format
+                    coordinates = ev.route[0].geometry.coordinates;
+                    console.log("Using GeoJSON coordinates: " + coordinates.length + " points");
+                }
+            }
+
+            // Fallback: extract from steps if main geometry didn't work
+            if (!coordinates || coordinates.length === 0) {
+                console.log("Falling back to extracting from steps");
+                ev.route[0].legs.forEach(leg => {
+                    leg.steps.forEach(step => {
+                        if (step.maneuver && step.maneuver.location) {
+                            coordinates.push(step.maneuver.location);
+                        }
+                    });
+                });
+                console.log("Extracted " + coordinates.length + " points from steps");
+            }
+
+            if (!coordinates || coordinates.length === 0) {
+                console.error("Could not extract any coordinates from route");
+                console.log("Route structure:", ev.route[0]);
+                return;
+            }
+
+            this.routeCoordinates = coordinates;
+            console.log("Route has " + this.routeCoordinates.length + " total coordinate points for animation");
+
+            // Calculate route distance to adjust animation speed
+            const routeDistanceKm = ev.route[0].distance / 1000; // Mapbox returns distance in meters
+            console.log("Route distance: " + routeDistanceKm.toFixed(2) + " km");
+
+            // Adjust speed based on distance - calibrated for smooth viewing
+            // Goal: roughly 30-60 second animation for any route
+            // Key: more interpolation steps = smoother animation between skipped points
+            if (routeDistanceKm < 10) {
+                // Short routes: detailed and smooth
+                this.pointSkip = 1;
+                this.interpolationSteps = 10;
+                this.animationInterval = 30;
+                console.log("Short route - detailed animation");
+            } else if (routeDistanceKm < 50) {
+                // Medium routes: balanced
+                this.pointSkip = 2;
+                this.interpolationSteps = 8;
+                this.animationInterval = 20;
+                console.log("Medium route - balanced animation");
+            } else if (routeDistanceKm < 200) {
+                // Long routes: faster but still smooth
+                this.pointSkip = 5;
+                this.interpolationSteps = 10;
+                this.animationInterval = 12;
+                console.log("Long route - fast animation");
+            } else if (routeDistanceKm < 500) {
+                // Very long routes
+                this.pointSkip = 8;
+                this.interpolationSteps = 12;
+                this.animationInterval = 10;
+                console.log("Very long route - faster animation");
+            } else {
+                // Epic routes like Boulder to Tucson (800+ km)
+                this.pointSkip = 12;
+                this.interpolationSteps = 15;  // More interpolation = smoother despite skipping
+                this.animationInterval = 8;
+                console.log("Epic route - balanced fast animation");
+            }
+
+            console.log("Animation settings - skip every " + this.pointSkip + " points, " +
+                       this.interpolationSteps + " interpolation steps, " +
+                       this.animationInterval + "ms interval");
+
+            this.currentRouteIndex = 0;
+            this.interpolationProgress = 0;
+            this.hasLoggedRotation = false;  // Reset for new route debugging
+
+            // Clear any existing animation
+            if (this.moveInterval) {
+                clearInterval(this.moveInterval);
+            }
+
+            // Capture Vue instance context
+            const vm = this;
+
+            // Start moving the horse along the route only if model is loaded
+            const startHorseMovement = () => {
+                if (!vm.routeCoordinates || vm.routeCoordinates.length === 0) {
+                    console.error("Cannot start horse movement - no route coordinates");
+                    return;
+                }
+
+                console.log("Starting horse animation with " + vm.routeCoordinates.length + " points");
+
+                // Set initial camera position for cinematic view
+                if (vm.cameraFollowHorse && vm.routeCoordinates.length > 0) {
+                    const startPoint = vm.routeCoordinates[0];
+                    vm.map.easeTo({
+                        center: [startPoint[0], startPoint[1]],
+                        zoom: 15,
+                        pitch: 60,
+                        duration: 1500
+                    });
+                }
+
+                vm.moveInterval = setInterval(() => {
+                    try {
+                        // Loop back to start when reaching the end
+                        if (!vm.routeCoordinates || vm.currentRouteIndex >= vm.routeCoordinates.length - 1) {
+                            console.log("Horse reached the destination! Starting over...");
+                            vm.currentRouteIndex = 0;
+                            vm.interpolationProgress = 0;
+                            // Don't return - let it continue to loop
+                        }
+
+                        // Get the current and next points (with point skipping)
+                        const currentPoint = vm.routeCoordinates[vm.currentRouteIndex];
+                        const nextIndex = Math.min(vm.currentRouteIndex + vm.pointSkip, vm.routeCoordinates.length - 1);
+                        const nextPoint = vm.routeCoordinates[nextIndex];
+
+                        if (!currentPoint || !nextPoint || currentPoint.length < 2 || nextPoint.length < 2) {
+                            console.error("Invalid coordinate at index " + vm.currentRouteIndex, currentPoint, nextPoint);
+                            vm.currentRouteIndex++;
+                            return;
+                        }
+
+                        // Linear interpolation between current and next point
+                        const t = vm.interpolationProgress / vm.interpolationSteps;
+                        const interpolatedX = currentPoint[0] + (nextPoint[0] - currentPoint[0]) * t;
+                        const interpolatedY = currentPoint[1] + (nextPoint[1] - currentPoint[1]) * t;
+
+                        // Calculate the bearing to the next point in radians
+                        const deltaX = nextPoint[0] - currentPoint[0];
+                        const deltaY = nextPoint[1] - currentPoint[1];
+                        const angleInRadians = Math.atan2(deltaX, deltaY);
+
+                        // Log movement for debugging rotation issues
+                        if (vm.currentRouteIndex === 0 && vm.interpolationProgress === 0) {
+                            console.log("Moving horse to first point:", currentPoint);
+                            console.log("Next point:", nextPoint);
+                            console.log("Delta X:", deltaX, "Delta Y:", deltaY);
+                            console.log("Angle (radians):", angleInRadians, "Angle (degrees):", angleInRadians * 180 / Math.PI);
+                        }
+
+                        // Update the horse's position and rotation
+                        vm.giddyUpHorse(interpolatedX, interpolatedY, angleInRadians);
+
+                        // Update camera to follow the horse
+                        if (vm.cameraFollowHorse) {
+                            // Convert bearing from radians to degrees for map bearing
+                            // Map bearing is clockwise from north (0° = north, 90° = east)
+                            // Our angle is from atan2(deltaX, deltaY)
+                            const bearingInDegrees = (angleInRadians * 180 / Math.PI);
+
+                            vm.map.jumpTo({
+                                center: [interpolatedX, interpolatedY],
+                                bearing: bearingInDegrees - 90,  // Offset so camera follows from behind
+                                pitch: 60,  // Nice cinematic tilt
+                                zoom: vm.map.getZoom() // Maintain current zoom
+                            });
+                        }
+
+                        // Increment interpolation progress
+                        vm.interpolationProgress++;
+
+                        // When we've completed interpolation between these two points, move to next segment
+                        if (vm.interpolationProgress >= vm.interpolationSteps) {
+                            vm.interpolationProgress = 0;
+                            vm.currentRouteIndex += vm.pointSkip;  // Skip points based on route distance
+                        }
+                    } catch (error) {
+                        console.error("Error in horse animation loop:", error);
+                        clearInterval(vm.moveInterval);
+                        vm.moveInterval = null;
+                    }
+                }, vm.animationInterval);  // Dynamic interval based on route distance
+            };
+
+            // Start movement if model is already loaded, otherwise wait
+            if (vm.isModelLoaded) {
+                startHorseMovement();
+            } else {
+                // Wait for model to load
+                const checkModelLoaded = setInterval(() => {
+                    if (vm.isModelLoaded) {
+                        clearInterval(checkModelLoaded);
+                        startHorseMovement();
+                    }
+                }, 100);
+            }
+
+            // Rest of the method for steps and duration...
             steps.forEach(step => {
                 let instructions = step.maneuver.instruction;
-                // grab the location for this maneuver and store it so
-                // we can zoom to it when a user clicks this step in the list
                 let location = step.maneuver.location;
-                // yonder up them words
                 let themWords = this.swapOutThemWords(instructions);
                 let iconPath = this.getThatIcon(instructions);
-                // create a step with only what we need to push it in our data
-                // including the bearing after the manuever so we can point that horse the right way
                 this.steps.push(
                     {
                         instructions: themWords,
@@ -432,7 +682,6 @@ new Vue({
                     }
                 );
 
-                // duration to display
                 let minutes = Math.floor(ev.route[0].duration / 60);
                 if(minutes < 60) {
                     this.duration = "It's just down the road a piece bout " + 
@@ -514,37 +763,58 @@ new Vue({
             this.locationData.geometry.coordinates = step.location;
             this.map.getSource('step-location-source').setData(this.locationData);
             // this horse is wip...
-            //this.giddyUpHorse(step.location[0], step.location[1], step.bearing);
-            //console.log("manuever bearing " + step.bearing);
-            //this.map.getSource('step-location-source').setData(this.locationData);
+            // step.bearing is in degrees, convert to radians
+            const bearingInRadians = step.bearing * (Math.PI / 180);
+            this.giddyUpHorse(step.location[0], step.location[1], bearingInRadians);
         },
         giddyUpHorse(x, y, heading) {
+          if (!this.mesh) {
+            console.error("Mesh is not loaded yet");
+            return;
+          }
+
+          if (isNaN(x) || isNaN(y) || isNaN(heading)) {
+            console.error("Invalid coordinates or heading:", x, y, heading);
+            return;
+          }
+
           this.modelX = x;
           this.modelY = y;
+
+          // Convert lng/lat to mercator coordinates for positioning on the map
           this.modelAsMercatorCoordinate = mapboxgl.MercatorCoordinate.fromLngLat(
               [this.modelX, this.modelY],
               0
           );
-  
-          // transformation parameters to position, rotate and scale the 3D model onto the map
-          
-          this.modelTransform = {
-              translateX: this.modelAsMercatorCoordinate.x,
-              translateY: this.modelAsMercatorCoordinate.y,
-              translateZ: this.modelAsMercatorCoordinate.z,
-              rotateX: this.modelRotate[0],
-              //rotateY: (heading - 90),
-              rotateY: this.modelRotate[1],
-              rotateZ: this.modelRotate[2],
-              /* Since our 3D model is in real world meters, a scale transform needs to be
-              * applied since the CustomLayerInterface expects units in MercatorCoordinates.
-              */
-              scale: this.modelAsMercatorCoordinate.meterInMercatorCoordinateUnits()
-          };
 
-          this.mesh.rotation.y = THREE.Math.degToRad(heading);
-        },
-        scaleThatHorse(zoom) {
+          // Transformation parameters to position, rotate and scale the 3D model onto the map
+          // heading is already in radians
+          this.modelTransform.translateX = this.modelAsMercatorCoordinate.x;
+          this.modelTransform.translateY = this.modelAsMercatorCoordinate.y;
+          this.modelTransform.translateZ = this.modelAsMercatorCoordinate.z;
+
+          // Apply heading rotation
+          // Horse model faces SOUTH by default, and coordinate system seems flipped
+          // Try flipping 180 degrees from current heading
+          this.modelTransform.rotateY = -heading + Math.PI;
+
+          // Debug: log the first rotation
+          if (!this.hasLoggedRotation) {
+              console.log("Horse rotation - heading:", heading, "heading in degrees:", heading * 180 / Math.PI);
+              console.log("Default facing: South (Math.PI), offset applied");
+              console.log("Final rotateY:", this.modelTransform.rotateY, "in degrees:", this.modelTransform.rotateY * 180 / Math.PI);
+              this.hasLoggedRotation = true;
+          }
+
+          this.modelTransform.scale = this.modelAsMercatorCoordinate.meterInMercatorCoordinateUnits();
+
+          // Trigger a repaint to show the updated position
+          this.map.triggerRepaint();
+      },
+      scaleThatHorse(zoom) {
+        if (!this.mesh) {
+          return;
+        }
           let scaleFactor = 1;
               if(zoom >= 13) {
                   scaleFactor = 2;
@@ -567,12 +837,6 @@ new Vue({
               else if(zoom >= 7 && zoom < 8) {
                   scaleFactor = 90;
               }
-              else if(zoom >= 8 && zoom < 9) {
-                  scaleFactor = 120;
-              }
-              else if(zoom >= 7 && zoom < 8) {
-                  scaleFactor = 150;
-              }
               else if(zoom >= 6 && zoom < 7) {
                   scaleFactor = 200;
               }
@@ -589,6 +853,7 @@ new Vue({
                   scaleFactor = 600;
               }
               this.mesh.scale.set(scaleFactor, scaleFactor, scaleFactor);
+              this.map.triggerRepaint();
         },
         getLink() {
             if(this.steps.length > 1) {
@@ -698,7 +963,10 @@ new Vue({
                         yonderVue.mixer
                           .clipAction(gltf.animations[0])
                           .setDuration(1).play();
-                        yonderVue.scaleThatHorse(yonderVue.map.getZoom().toFixed(2));
+
+                        // Mark the model as loaded
+                        yonderVue.isModelLoaded = true;
+                        //yonderVue.scaleThatHorse(yonderVue.map.getZoom().toFixed(2));
                       }.bind(yonderVue.thatHorseLayer)
                   );
 
@@ -752,10 +1020,8 @@ new Vue({
                   this.thatHorseLayer.renderer.resetState();
                   this.thatHorseLayer.renderer.render(this.scene, this.camera);
                   this.map.triggerRepaint();
-                  this.theta += 0.1;
-                  this.camera.position.x = Math.sin( THREE.MathUtils.degToRad( this.theta ) );
-                  this.camera.position.z = Math.cos( THREE.MathUtils.degToRad( 500 ) );
-                  this.camera.lookAt( 0, 0, 0 );
+
+                  // Update the animation mixer for the galloping animation
                   if (this.mixer) {
                       const time = Date.now();
                       this.mixer.update( ( time - this.prevTime ) * 0.001 );
@@ -768,6 +1034,19 @@ new Vue({
               this.map.addLayer(this.thatHorseLayer);
               // scale the horse by initial zoom
               this.scaleThatHorse(this.map.getZoom().toFixed(2));
+
+              // Move horse layer above route layers when route is loaded
+              // This ensures the horse is visible on top of the route line
+              this.directionsThing.on('route', () => {
+                  // Give it a tiny delay to ensure route layers are added
+                  setTimeout(() => {
+                      if (this.map.getLayer('3d-model')) {
+                          // Move the horse layer to the top so it renders above routes
+                          this.map.moveLayer('3d-model');
+                          console.log("Moved horse layer above route");
+                      }
+                  }, 100);
+              });
           });
         }
     }
