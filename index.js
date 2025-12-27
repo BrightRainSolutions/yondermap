@@ -90,8 +90,7 @@ new Vue({
             if(start !== "" && end !=="") {
                 this.origin = start;
                 this.destination = end;
-                //trackEvent(category, action, [name], [value])
-                _paq.push(['trackEvent', 'Route', 'FromURL']);
+                this.track('RouteFromURL', { origin: start, destination: end });
             }
         } 
     },
@@ -330,6 +329,17 @@ new Vue({
           }]
     },
     methods: {
+        // Safe wrapper for Plausible events; never blocks app flow
+        track(eventName, props = {}) {
+            try {
+                if (window.plausible && typeof window.plausible === 'function') {
+                    const payload = Object.keys(props).length ? { props } : undefined;
+                    window.plausible(eventName, payload);
+                }
+            } catch (e) {
+                // ignore analytics errors
+            }
+        },
         // Decode polyline string into coordinate array
         // Mapbox Directions API uses polyline5 encoding (precision 5) by default
         decodePolyline(encoded, precision = 5) {
@@ -398,11 +408,11 @@ new Vue({
             this.map.on('load', () => {
               // Listen for the `directions.route` event then populate our directions panel
                 this.directionsThing.on('route', ev => {
-                    _paq.push(['trackEvent', 'Route', 'RouteRequested']);
                     let originCoords = this.directionsThing.getOrigin().geometry.coordinates;
                     this.origin = originCoords[0].toString() + "," + originCoords[1].toString();
                     let destCoords = this.directionsThing.getDestination().geometry.coordinates;
                     this.destination = destCoords[0].toString() + "," + destCoords[1].toString();
+                    this.track('RouteRequested', { origin: this.origin, destination: this.destination });
                     this.yonderThatRoute(ev);
                 });
 
@@ -1017,10 +1027,10 @@ new Vue({
             this.notice = 'Pardner link copied!';
             this.notify = true;
             setTimeout(() => { this.notify = false; }, 3000);
-            _paq.push(['trackEvent', 'Route', 'CopyRouteLink']);
+            this.track('CopyRouteLink');
         },
         findEm() {
-          _paq.push(['trackEvent', 'Locate', 'LocateBtn']);
+          this.track('LocateBtn');
           navigator.geolocation.getCurrentPosition(position => {
               const latitude  = position.coords.latitude;
               const longitude = position.coords.longitude;
