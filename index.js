@@ -409,9 +409,9 @@ new Vue({
               // Listen for the `directions.route` event then populate our directions panel
                 this.directionsThing.on('route', ev => {
                     let originCoords = this.directionsThing.getOrigin().geometry.coordinates;
-                    this.origin = originCoords[0].toString() + "," + originCoords[1].toString();
+                    this.origin = originCoords[0].toFixed(5) + "," + originCoords[1].toFixed(5);
                     let destCoords = this.directionsThing.getDestination().geometry.coordinates;
-                    this.destination = destCoords[0].toString() + "," + destCoords[1].toString();
+                    this.destination = destCoords[0].toFixed(5) + "," + destCoords[1].toFixed(5);
                     this.track('RouteRequested', { origin: this.origin, destination: this.destination });
                     this.yonderThatRoute(ev);
                 });
